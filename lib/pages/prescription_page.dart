@@ -1,0 +1,406 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:arogya_mitra_patient/database/firebase_db.dart';
+import 'package:arogya_mitra_patient/models/prescription.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+class PrescriptionPage extends StatefulWidget {
+  final String consultationId;
+  const PrescriptionPage({super.key, required this.consultationId});
+
+  @override
+  State<PrescriptionPage> createState() => _PrescriptionState();
+}
+
+class _PrescriptionState extends State<PrescriptionPage> {
+  bool isLoading = true;
+  Map<String, dynamic>? consultationData;
+  PrescriptionModel? prescriptionData;
+
+  // Cache to store doctor information to avoid redundant fetches
+  Map<String, String> _doctorCache = {};
+
+  @override
+  void initState() {
+    super.initState();
+    fetchConsultationData();
+  }
+
+  // Fetch doctor information from Firestore
+  Future<String> _fetchDoctorName(String doctorId) async {
+    // Check if doctor info is already in cache
+    if (_doctorCache.containsKey(doctorId)) {
+      return _doctorCache[doctorId]!;
+    }
+
+    try {
+      final doctorDoc =
+          await FirebaseDb.firestore.collection('doctors').doc(doctorId).get();
+
+      if (doctorDoc.exists) {
+        String doctorName = doctorDoc['name'] ?? 'Unknown Doctor';
+
+        // Store in cache for future use
+        _doctorCache[doctorId] = doctorName;
+        return doctorName;
+      } else {
+        return 'Unknown Doctor';
+      }
+    } catch (e) {
+      print('Error fetching doctor info: $e');
+      return 'Unknown Doctor';
+    }
+  }
+
+  Future<void> fetchConsultationData() async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
+
+      DocumentSnapshot consultationDoc =
+          await FirebaseDb.firestore
+              .collection('consultations')
+              .doc(widget.consultationId)
+              .get();
+
+      if (consultationDoc.exists) {
+        final data = consultationDoc.data() as Map<String, dynamic>;
+
+        setState(() {
+          consultationData = data;
+
+          // Parse prescription data if it exists
+          if (data.containsKey('prescription') &&
+              data['prescription'] != null) {
+            prescriptionData = PrescriptionModel.fromJson(data['prescription']);
+          }
+
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Consultation not found')));
+      }
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error fetching consultation: ${e.toString()}')),
+      );
+      print('Error fetching consultation: ${e.toString()}');
+    }
+  }
+
+  Future<void> generateAndSavePDF() async {
+    final ByteData imageData = await rootBundle.load('assets/logo.png');
+    final Uint8List logoBytes = imageData.buffer.asUint8List();
+    String doctorName = await _fetchDoctorName(
+      consultationData!['doctorId'] ?? '',
+    );
+
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    "Arogya Mitra Prescription",
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Image(pw.MemoryImage(logoBytes), width: 100, height: 100),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Divider(),
+              pw.Text(
+                "Date: ${DateTime.now().toLocal().toString().split(' ')[0]}",
+                style: pw.TextStyle(fontSize: 16),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Text("Doctor: Dr. $doctorName"),
+              pw.Text("Patient: ${consultationData!['patientName'] ?? 'N/A'}"),
+              if (prescriptionData?.medicines.isNotEmpty ?? false) ...[
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  "Medicines:",
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 5),
+                ...prescriptionData!.medicines.map(
+                  (med) =>
+                      pw.Text("- ${med['name']} (Timing: ${med['timing']})"),
+                ),
+              ],
+              if (prescriptionData?.labTests.isNotEmpty ?? false) ...[
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  "Lab Tests:",
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 5),
+                ...prescriptionData!.labTests.map((test) => pw.Text("- $test")),
+              ],
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+            ],
+          );
+        },
+      ),
+    );
+
+    Directory? directory = await getApplicationDocumentsDirectory();
+    String filePath =
+        "${directory.path}/prescription_${widget.consultationId}.pdf";
+    final file = File(filePath);
+    await file.writeAsBytes(await pdf.save());
+
+    OpenFile.open(filePath);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Prescription'),
+        actions: [
+          if (!isLoading && prescriptionData != null)
+            IconButton(
+              icon: const Icon(Icons.print),
+              onPressed: generateAndSavePDF,
+              tooltip: 'Print PDF',
+            ),
+        ],
+      ),
+      body:
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : consultationData == null
+              ? const Center(child: Text('No consultation data found'))
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildConsultationInfoCard(),
+                    const SizedBox(height: 20),
+                    prescriptionData != null
+                        ? _buildPrescriptionCard()
+                        : const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: Text(
+                              'No prescription data available for this consultation',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+    );
+  }
+
+  Widget _buildConsultationInfoCard() {
+    // Format timestamp to readable date if available
+    String formattedDate = 'N/A';
+    if (consultationData!.containsKey('createdAt') &&
+        consultationData!['createdAt'] != null) {
+      try {
+        Timestamp timestamp = consultationData!['createdAt'] as Timestamp;
+        DateTime dateTime = timestamp.toDate();
+        formattedDate =
+            '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}';
+      } catch (e) {
+        print('Error formatting date: $e');
+      }
+    }
+
+    // Get doctorId from consultation data
+    String doctorId = consultationData!['doctorId'] ?? '';
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            Text('Date: $formattedDate'),
+            const SizedBox(height: 10),
+            FutureBuilder<String>(
+              future:
+                  doctorId.isNotEmpty
+                      ? _fetchDoctorName(doctorId)
+                      : Future.value('Unknown Doctor'),
+              builder: (context, snapshot) {
+                String doctorName =
+                    snapshot.connectionState == ConnectionState.waiting
+                        ? 'Loading...'
+                        : snapshot.data ?? 'Unknown Doctor';
+                return Text('Doctor: Dr. $doctorName');
+              },
+            ),
+            const SizedBox(height: 10),
+            Text('Patient: ${consultationData!['patientName'] ?? 'N/A'}'),
+            const SizedBox(height: 10),
+            Text('Status: ${consultationData!['status'] ?? 'N/A'}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrescriptionCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Prescription Details',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
+
+            // Medicines Section
+            const Text(
+              'Medicines:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            if (prescriptionData!.medicines.isNotEmpty)
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: prescriptionData!.medicines.length,
+                itemBuilder: (context, index) {
+                  final medicine = prescriptionData!.medicines[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: Colors.blue.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            medicine['name'] ?? 'Unnamed Medicine',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'Timing: ${medicine['timing'] ?? 'Not specified'}',
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              )
+            else
+              const Text(
+                'No medicines prescribed',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+
+            const SizedBox(height: 20),
+
+            // Lab Tests Section
+            const Text(
+              'Lab Tests:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            if (prescriptionData!.labTests.isNotEmpty)
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: prescriptionData!.labTests.length,
+                itemBuilder: (context, index) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: Colors.green.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Text(
+                        prescriptionData!.labTests[index],
+                        style: const TextStyle(fontSize: 15),
+                      ),
+                    ),
+                  );
+                },
+              )
+            else
+              const Text(
+                'No lab tests recommended',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+
+            // Prescription Timestamp
+            if (consultationData!.containsKey('prescription') &&
+                consultationData!['prescription'] is Map &&
+                consultationData!['prescription'].containsKey('timestamp'))
+              Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Text(
+                  'Prescribed on: ${_formatTimestamp(consultationData!['prescription']['timestamp'])}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      DateTime dateTime = timestamp.toDate();
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute}';
+    }
+    return 'Date not available';
+  }
+}

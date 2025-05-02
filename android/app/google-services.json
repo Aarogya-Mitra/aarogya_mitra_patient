@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1091822484217",
+    "project_id": "arogya-mitra-98929",
+    "storage_bucket": "arogya-mitra-98929.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1091822484217:android:7c450dbeff38593f024028",
+        "android_client_info": {
+          "package_name": "com.example.arogya_mitra_doctor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAulhGuKv25vMN1x4qtnFbDMRvv-a_rMbA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1091822484217:android:9054ea999847f1a4024028",
+        "android_client_info": {
+          "package_name": "com.example.arogya_mitra_patient"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAulhGuKv25vMN1x4qtnFbDMRvv-a_rMbA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
