@@ -12,7 +12,7 @@ class Consultation {
   final DateTime? consultationDate;
   final bool isCompleted;
   final String patientName;
-  final Prescription? prescription; // Added prescription field
+  final Prescription? prescription;
 
   Consultation({
     required this.id,
@@ -26,43 +26,26 @@ class Consultation {
     this.consultationDate,
     this.isCompleted = false,
     this.patientName = 'Unknown Patient',
-    this.prescription, // Initialize prescription
+    this.prescription,
   });
 
   factory Consultation.fromJson(Map<String, dynamic> json, String docId) {
-    DateTime? createdAtDate;
-    if (json['createdAt'] != null) {
-      createdAtDate = (json['createdAt'] as Timestamp).toDate();
-    }
-
-    DateTime? updatedAtDate;
-    if (json['updatedAt'] != null) {
-      updatedAtDate = (json['updatedAt'] as Timestamp).toDate();
-    }
-
-    DateTime? consultationDateValue;
-    if (json['consultationDate'] != null) {
-      consultationDateValue = (json['consultationDate'] as Timestamp).toDate();
-    }
-
-    Prescription? prescriptionValue;
-    if (json['prescription'] != null) {
-      prescriptionValue = Prescription.fromJson(json['prescription']);
-    }
-
     return Consultation(
       id: docId,
       patientId: json['patientId'] ?? '',
       doctorId: json['doctorId'],
       title: json['title'] ?? 'New Consultation',
       status: json['status'] ?? 'open',
-      createdAt: createdAtDate ?? DateTime.now(),
-      updatedAt: updatedAtDate ?? DateTime.now(),
+      createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       patientComplaint: json['patientComplaint'],
-      consultationDate: consultationDateValue,
+      consultationDate: (json['consultationDate'] as Timestamp?)?.toDate(),
       isCompleted: json['isCompleted'] ?? false,
       patientName: json['patientName'] ?? 'Unknown Patient',
-      prescription: prescriptionValue,
+      prescription:
+          json['prescription'] != null
+              ? Prescription.fromJson(json['prescription'])
+              : null,
     );
   }
 
@@ -75,9 +58,10 @@ class Consultation {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'patientComplaint': patientComplaint,
-      'consultationDate': consultationDate != null
-          ? Timestamp.fromDate(consultationDate!)
-          : null,
+      'consultationDate':
+          consultationDate != null
+              ? Timestamp.fromDate(consultationDate!)
+              : null,
       'isCompleted': isCompleted,
       'patientName': patientName,
       'prescription': prescription?.toJson(),
@@ -119,10 +103,7 @@ class Prescription {
   final List<Map<String, dynamic>> medicines; // Medicine name with timings
   final List<String> labTests;
 
-  Prescription({
-    required this.medicines,
-    required this.labTests,
-  });
+  Prescription({required this.medicines, required this.labTests});
 
   factory Prescription.fromJson(Map<String, dynamic> json) {
     List<Map<String, dynamic>> medicinesList = [];
@@ -136,18 +117,15 @@ class Prescription {
 
     return Prescription(
       medicines: medicinesList,
-      labTests: json['lab_tests'] != null ? List<String>.from(json['lab_tests']) : [],
+      labTests:
+          json['lab_tests'] != null ? List<String>.from(json['lab_tests']) : [],
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'medicines': medicines,
-      'lab_tests': labTests,
-    };
+    return {'medicines': medicines, 'lab_tests': labTests};
   }
 }
-
 
 class ConsultationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -162,8 +140,9 @@ class ConsultationService {
             .update(consultation.toJson());
         return consultation.id;
       } else {
-        DocumentReference docRef =
-        await _firestore.collection(_collectionName).add(consultation.toJson());
+        DocumentReference docRef = await _firestore
+            .collection(_collectionName)
+            .add(consultation.toJson());
         return docRef.id;
       }
     } catch (e) {

@@ -306,26 +306,11 @@ class _ConsultationViaVoiceState extends State<ConsultationViaVoice> {
               ElevatedButton(
                 onPressed: () async {
                   await _createNewConsultation(summary);
-                  _createNewConsultation(summary);
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder:
-                  //         (context) => VideoCallScreen(
-                  //           channelName: authService.currentUser!.uid,
-                  //           token: AppConstants.token,
-                  //           appId: AppConstants.appId,
-                  //           isPatient: true,
-                  //         ),
-                  //   ),
-                  // );
+
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder:
-                          (context) => CallPage(
-                            roomID: FirebaseDb.auth.currentUser!.uid,
-                          ),
+                      builder: (context) => CallPage(callID: 'roomId'),
                     ),
                   );
                 },

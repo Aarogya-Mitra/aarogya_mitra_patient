@@ -158,48 +158,58 @@ class _ConsultationPageState extends State<ConsultationPage> {
         context,
         message: "Creating Consultation...",
       );
-      // Get current user's profile to fetch the name
+
+      // Fetch current user ID
+      final userId = FirebaseDb.auth.currentUser?.uid;
+      if (userId == null) throw Exception("User not logged in.");
+
+      // Get user profile for patient name
       final PatientProfile? userProfile = await FirebaseDb.getPatientProfile(
-        FirebaseDb.auth.currentUser!.uid,
+        userId,
       );
       final patientName = userProfile?.name ?? 'Unknown Patient';
 
       final consultation = Consultation(
-        id: '', // This will be assigned by Firestore
-        patientId: FirebaseDb.auth.currentUser!.uid,
-        doctorId: null, // Will be assigned when a doctor accepts
+        id: '', // Placeholder, Firestore will assign actual ID
+        patientId: userId,
+        doctorId: null,
         title: patientName,
         status: 'open',
         createdAt: now,
         updatedAt: now,
         patientComplaint: patientComplaintSummary,
-        patientName: patientName, // Add patient name
+        consultationDate: null,
+        isCompleted: false,
+        patientName: patientName,
+        prescription: null,
       );
 
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
+      final newId = await FirebaseDb.createConsultation(consultation);
 
-      final consultationId = await FirebaseDb.createConsultation(consultation);
+      if (mounted) Navigator.of(context).pop(); // Close loading dialog
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Consultation created successfully! A doctor will review it soon.",
+      if (newId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Consultation created successfully! A doctor will review it soon.",
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
           ),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
-
-      // Navigate back to patient home
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomePage()),
         );
+      } else {
+        throw Exception("Failed to create consultation.");
       }
+
+      // Optional navigation
+      // if (mounted) {
+      //   Navigator.of(context).pushReplacement(
+      //     MaterialPageRoute(builder: (context) => const HomePage()),
+      //   );
+      // }
     } catch (e) {
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(); // Close loading dialog if open
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -263,28 +273,18 @@ class _ConsultationPageState extends State<ConsultationPage> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  await _createNewConsultation(summary);
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder:
-                  //         (context) => VideoCallScreen(
-                  //           channelName: authService.currentUser!.uid,
-                  //           token: AppConstants.token,
-                  //           appId: AppConstants.appId,
-                  //           isPatient: true,
-                  //         ),
-                  //   ),
-                  // );
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => CallPage(
-                            roomID: FirebaseDb.auth.currentUser!.uid,
-                          ),
-                    ),
-                  );
+                  try {
+                    await _createNewConsultation(summary);
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CallPage(callID: 'roomId'),
+                      ),
+                    );
+                  } catch (e) {
+                    print("Error creating consultation: $e");
+                  }
                 },
                 child: const Text("Join In"),
               ),

@@ -7,10 +7,7 @@ class FirebaseDb {
   static final FirebaseAuth auth = FirebaseAuth.instance;
   static final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-  static Future<bool> signInWithEmailAndPassword(
-    String email,
-    String password,
-  ) async {
+  static Future<bool> signInWithEmailAndPassword(String email, String password) async {
     try {
       await auth.signInWithEmailAndPassword(email: email, password: password);
       return true;
@@ -24,16 +21,9 @@ class FirebaseDb {
     await auth.signOut();
   }
 
-  static Future<bool> signUpWithEmailAndPassword(
-    String email,
-    String password,
-  ) async {
+  static Future<bool> signUpWithEmailAndPassword(String email, String password) async {
     try {
-      await auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
+      await auth.createUserWithEmailAndPassword(email: email, password: password);
       return true;
     } catch (e) {
       print(e.toString());
@@ -69,29 +59,14 @@ class FirebaseDb {
   }
 
   static Future<String?> createConsultation(Consultation consultation) async {
-  try {
-    DocumentReference docRef = await firestore.collection('consultations').add({
-      'patient_id': consultation.patientId,
-      'doctor_id': consultation.doctorId,
-      'title': consultation.title,
-      'status': consultation.status,
-      'created_at': consultation.createdAt.toIso8601String(),
-      'updated_at': consultation.updatedAt.toIso8601String(),
-      'patient_complaint': consultation.patientComplaint,
-      'consultation_date': consultation.consultationDate?.toIso8601String(),
-      'is_completed': consultation.isCompleted,
-      'patient_name': consultation.patientName,
-      'prescription': {
-        'medicines': consultation.prescription?.medicines ?? [],
-        'lab_tests': consultation.prescription?.labTests ?? [],
-      },
-    });
-
-    return docRef.id;
-  } catch (e) {
-    print("Error creating consultation: ${e.toString()}");
-    return null;
+    try {
+      final json = consultation.toJson();
+      json.remove('id'); // Firestore generates the ID
+      DocumentReference docRef = await firestore.collection('consultations').add(json);
+      return docRef.id;
+    } catch (e) {
+      print("Error creating consultation: ${e.toString()}");
+      return null;
+    }
   }
-}
-
 }
